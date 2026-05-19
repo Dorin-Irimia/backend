@@ -1,0 +1,577 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  phone     String?
+  avatar    String?
+  pushToken String?
+  role      String   @default("user") // user | admin
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vehicles               Vehicle[]
+  documents              Document[]
+  folders                Folder[]
+  invoices               Invoice[]
+  invoicesUpdated        Invoice[]       @relation("InvoiceUpdatedBy")
+  reminders              Reminder[]
+  fuelLogs               FuelLog[]
+  fuelLogsUpdated        FuelLog[]       @relation("FuelLogUpdatedBy")
+  notifications          Notification[]
+  auditLogs              AuditLog[]
+  refreshTokens          RefreshToken[]
+  friendRequestsSent     Friendship[]    @relation("FriendRequester")
+  friendRequestsReceived Friendship[]    @relation("FriendAddressee")
+  vehicleMemberships     VehicleMember[] @relation("MemberUser")
+  vehicleMembersAdded    VehicleMember[] @relation("MemberAddedBy")
+
+  households                Household[]
+  householdMemberships      HouseholdMember[]   @relation("HouseholdMemberUser")
+  householdMembersAdded     HouseholdMember[]   @relation("HouseholdMemberAddedBy")
+  householdExpenses         HouseholdExpense[]
+  householdExpensesUpdated  HouseholdExpense[]  @relation("HouseholdExpenseUpdatedBy")
+  householdIncomes          HouseholdIncome[]
+  householdIncomesUpdated   HouseholdIncome[]   @relation("HouseholdIncomeUpdatedBy")
+  householdEvents           HouseholdEvent[]
+  householdEventsUpdated    HouseholdEvent[]    @relation("HouseholdEventUpdatedBy")
+  householdBills            HouseholdBill[]
+  householdBillsUpdated     HouseholdBill[]     @relation("HouseholdBillUpdatedBy")
+  budgetCategories          BudgetCategory[]
+  budgetCategoriesUpdated   BudgetCategory[]    @relation("BudgetCategoryUpdatedBy")
+
+  serviceRecords          ServiceRecord[]
+  serviceRecordsUpdated   ServiceRecord[] @relation("ServiceRecordUpdatedBy")
+
+  chatMessagesSent     ChatMessage[] @relation("ChatFrom")
+  chatMessagesReceived ChatMessage[] @relation("ChatTo")
+}
+
+model Friendship {
+  id          String   @id @default(uuid())
+  requesterId String
+  requester   User     @relation("FriendRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addresseeId String
+  addressee   User     @relation("FriendAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+  status      String   @default("pending") // pending | accepted | declined | blocked
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+  @@index([requesterId, status])
+}
+
+model VehicleMember {
+  id        String   @id @default(uuid())
+  vehicleId String
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation("MemberUser", fields: [userId], references: [id], onDelete: Cascade)
+  addedById String?
+  addedBy   User?    @relation("MemberAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+  role      String   @default("member") // member | viewer (reserved)
+  createdAt DateTime @default(now())
+
+  @@unique([vehicleId, userId])
+  @@index([userId])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Vehicle {
+  id       String  @id @default(uuid())
+  clientId String?
+  userId   String
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  plate    String
+  brand    String
+  model    String
+  year     Int
+  vin      String?
+  color    String?
+  km       Int     @default(0)
+  fuel     String  @default("Benzina")
+  power    Int?
+  photo    String?
+  category String  @default("masina")
+
+  itpDate   String?
+  rcaDate   String?
+  cascoDate String?
+  rovDate   String?
+
+  purchaseDate String? // YYYY-MM-DD - data achiziției
+  purchaseKm   Int? // km la momentul achiziției
+
+  isAvailable        Boolean @default(true) // switch manual
+  unavailableReason  String?
+  unavailableFrom    String?
+  unavailableUntil   String? // null = perioadă deschisă
+  lastEffectiveState String? // "available" | "unavailable" - pentru detectare tranziții auto
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents      Document[]
+  invoices       Invoice[]
+  reminders      Reminder[]
+  fuelLogs       FuelLog[]
+  members        VehicleMember[]
+  folders        Folder[]
+  serviceRecords ServiceRecord[]
+
+  @@unique([userId, clientId])
+}
+
+model Document {
+  id        String   @id @default(uuid())
+  clientId  String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicleId String?
+  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  folderId  String?
+  folder    Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  name          String
+  type          String // talon | rca | casco | itp | factura | garantie | altele - sincronizat cu folder.systemType
+  fileUrl       String?
+  fileName      String? // numele original al fișierului
+  mimeType      String? // image/jpeg, application/pdf, etc.
+  fileSize      Int? // bytes
+  signedUrl     String?
+  signatureData String?
+  isSigned      Boolean @default(false)
+  expiryDate    String?
+  notes         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, clientId])
+  @@index([folderId])
+  @@index([vehicleId])
+}
+
+model Folder {
+  id        String   @id @default(uuid())
+  clientId  String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicleId String? // null = folder personal/global
+  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  name       String
+  icon       String? // emoji
+  color      String?
+  isSystem   Boolean @default(false)
+  systemType String? // itp | rca | casco | rov | service | invoice | (custom = null)
+  sortOrder  Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents Document[]
+
+  @@unique([userId, clientId])
+  @@index([vehicleId])
+}
+
+model Invoice {
+  id        String  @id @default(uuid())
+  clientId  String?
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedById String?
+  updatedBy User?   @relation("InvoiceUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  vehicleId String
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  title        String
+  amount       Float
+  currency     String  @default("RON")
+  category     String // service | combustibil | asigurare | anvelope | piese | altele
+  date         String // YYYY-MM-DD
+  time         String? // HH:mm (optional)
+  km           Int? // km la momentul cheltuielii
+  merchant     String? // nume magazin / atelier / firmă
+  location     String? // adresă liberă
+  fileUrl      String? // legacy (păstrat pt compatibilitate)
+  notes        String?
+  customFields Json? // { fieldName: value, ... } extensibil de user
+
+  // Sincronizare cu cheltuielile casnice — dacă utilizatorul a ales
+  // să replice această factură ca HouseholdExpense.
+  linkedHouseholdExpenseId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  attachments Attachment[]
+
+  @@unique([userId, clientId])
+}
+
+model Reminder {
+  id        String   @id @default(uuid())
+  clientId  String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicleId String?
+  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+
+  title   String
+  dueDate String
+  type    String // itp | rca | casco | rovinieta | service | altele
+  repeat  String  @default("none") // none | monthly | yearly
+  isDone  Boolean @default(false)
+  notes   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, clientId])
+}
+
+model FuelLog {
+  id        String  @id @default(uuid())
+  clientId  String?
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedById String?
+  updatedBy User?   @relation("FuelLogUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  vehicleId String
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  date         String // YYYY-MM-DD
+  time         String? // HH:mm
+  liters       Float
+  pricePerL    Float
+  total        Float
+  km           Int
+  station      String? // OMV, Petrom, etc.
+  location     String? // adresă liberă
+  fuelType     String? // benzina | motorina | gpl | electric
+  fullTank     Boolean @default(true)
+  notes        String?
+  customFields Json?
+
+  // Sincronizare cu cheltuielile casnice (similar Invoice).
+  linkedHouseholdExpenseId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  attachments Attachment[]
+
+  @@unique([userId, clientId])
+}
+
+model Attachment {
+  id                 String            @id @default(uuid())
+  userId             String
+  invoiceId          String?
+  invoice            Invoice?          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  fuelLogId          String?
+  fuelLog            FuelLog?          @relation(fields: [fuelLogId], references: [id], onDelete: Cascade)
+  householdExpenseId String?
+  householdExpense   HouseholdExpense? @relation(fields: [householdExpenseId], references: [id], onDelete: Cascade)
+
+  fileName String
+  fileUrl  String
+  mimeType String
+  fileSize Int    @default(0)
+  kind     String @default("image") // image | pdf | doc | other
+
+  createdAt DateTime @default(now())
+
+  @@index([invoiceId])
+  @@index([fuelLogId])
+  @@index([householdExpenseId])
+  @@index([userId])
+}
+
+model Notification {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String
+  body        String
+  type        String  @default("info") // info | warning | urgent
+  isRead      Boolean @default(false)
+  relatedId   String?
+  relatedType String?
+
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  action   String
+  entity   String
+  entityId String?
+  details  String?
+  ip       String?
+
+  createdAt DateTime @default(now())
+}
+
+// ─── HOUSEHOLD ────────────────────────────────────────────────────────────────
+
+model Household {
+  id       String  @id @default(uuid())
+  clientId String?
+  userId   String
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name          String
+  address       String?
+  photo         String?
+  type          String  @default("apartament") // apartament | casa | studio | birou
+  rooms         Int?
+  surface       Float? // m²
+  monthlyBudget Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members          HouseholdMember[]
+  expenses         HouseholdExpense[]
+  incomes          HouseholdIncome[]
+  events           HouseholdEvent[]
+  bills            HouseholdBill[]
+  budgetCategories BudgetCategory[]
+
+  @@unique([userId, clientId])
+}
+
+model HouseholdMember {
+  id          String    @id @default(uuid())
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation("HouseholdMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+  addedById   String?
+  addedBy     User?     @relation("HouseholdMemberAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+  role        String    @default("member") // member | viewer
+  createdAt   DateTime  @default(now())
+
+  @@unique([householdId, userId])
+  @@index([userId])
+}
+
+model HouseholdExpense {
+  id          String    @id @default(uuid())
+  clientId    String?
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedById String?
+  updatedBy   User?     @relation("HouseholdExpenseUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  title        String
+  amount       Float
+  currency     String  @default("RON")
+  category     String // utilitati | intretinere | mobila | reparatii | mancare | curatenie | rate | abonamente | altele | (orice cheie de BudgetCategory)
+  date         String
+  time         String?
+  merchant     String?
+  location     String?
+  notes        String?
+  customFields Json?
+
+  // Sursa (când e creată automat dintr-o factură/alimentare mașină)
+  source       String? // null | invoice | fuel | bill
+  sourceId     String? // id-ul invoice/fuel/bill care a generat-o
+
+  // Splitting
+  splitMode   String? @default("single") // single | equal | custom
+  splitShares Json? // { userId: amount } pentru custom
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  attachments Attachment[]
+
+  @@unique([userId, clientId])
+  @@index([householdId])
+  @@index([householdId, source])
+}
+
+model HouseholdIncome {
+  id          String    @id @default(uuid())
+  clientId    String?
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedById String?
+  updatedBy   User?     @relation("HouseholdIncomeUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  title        String
+  amount       Float
+  currency     String  @default("RON")
+  category     String // salariu | chirie | freelance | dividende | bonusuri | cadou | altele
+  date         String
+  source       String?
+  recurring    String  @default("none") // none | monthly | yearly
+  notes        String?
+  customFields Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([userId, clientId])
+  @@index([householdId])
+}
+
+model HouseholdEvent {
+  id          String    @id @default(uuid())
+  clientId    String?
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedById String?
+  updatedBy   User?     @relation("HouseholdEventUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  title           String
+  type            String // curierat | vizita | petrecere | intretinere | utilitati | medical | scoala | altele
+  startDate       String
+  startTime       String?
+  endDate         String?
+  endTime         String?
+  location        String?
+  notes           String?
+  isDone          Boolean @default(false)
+  reminderMinutes Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([userId, clientId])
+  @@index([householdId])
+}
+
+model ServiceRecord {
+  id        String  @id @default(uuid())
+  clientId  String?
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedById String?
+  updatedBy User?   @relation("ServiceRecordUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  vehicleId String
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  date     String // YYYY-MM-DD (planificat sau efectuat)
+  km       Int?
+  type     String // service-general | schimb-ulei | anvelope | frane | itp | curatenie | reparatie | piese
+  title    String
+  provider String?
+  cost     Float   @default(0)
+  upcoming Boolean @default(false)
+  notes    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([userId, clientId])
+  @@index([vehicleId, date])
+}
+
+model HouseholdBill {
+  id          String    @id @default(uuid())
+  clientId    String?
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedById String?
+  updatedBy   User?     @relation("HouseholdBillUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  provider  String
+  name      String
+  icon      String  @default("📄")
+  color     String  @default("#6B7280")
+  amount    Float
+  currency  String  @default("RON")
+  dueDate   String // YYYY-MM-DD
+  status    String  @default("due") // due | paid | overdue | scheduled
+  paidDate  String?
+  recurring String  @default("none") // none | lunar | anual
+  notes     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([userId, clientId])
+  @@index([householdId])
+}
+
+model BudgetCategory {
+  id          String    @id @default(uuid())
+  clientId    String?
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedById String?
+  updatedBy   User?     @relation("BudgetCategoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  key          String // utilitati | alimente | casa | transport | sanatate | distractii | altele
+  label        String
+  icon         String @default("📦")
+  color        String @default("#6B7280")
+  monthlyLimit Float  @default(0)
+  sortOrder    Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([householdId, key])
+  @@index([householdId])
+}
+
+model ChatMessage {
+  id         String  @id @default(uuid())
+  clientId   String?
+  fromUserId String
+  fromUser   User    @relation("ChatFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUserId   String
+  toUser     User    @relation("ChatTo", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  text     String?
+  kind     String  @default("text") // text | doc-share | expense-share | shared-vehicle | system
+  metadata Json?
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@unique([fromUserId, clientId])
+  @@index([fromUserId, toUserId, createdAt])
+  @@index([toUserId, readAt])
+}
