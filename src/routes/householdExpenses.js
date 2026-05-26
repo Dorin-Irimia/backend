@@ -157,7 +157,7 @@ router.post('/', upload, async (req, res) => {
     const {
       clientId, householdId, title, amount, currency, category, date, time,
       merchant, location, notes, customFields, splitMode, splitShares,
-      source, sourceId,
+      source, sourceId, paymentMethod, fromIncomeId,
     } = req.body;
     if (!householdId || !title || !amount || !date) {
       cleanupUploadedFiles(req.files);
@@ -195,6 +195,8 @@ router.post('/', upload, async (req, res) => {
         splitShares: parseJson(splitShares),
         source: source || null,
         sourceId: sourceId || null,
+        paymentMethod: paymentMethod || null,
+        fromIncomeId: fromIncomeId || null,
       },
     });
 
@@ -248,6 +250,7 @@ router.put('/:id', upload, async (req, res) => {
     const {
       title, amount, currency, category, date, time,
       merchant, location, notes, customFields, splitMode, splitShares,
+      paymentMethod, fromIncomeId,
     } = req.body;
 
     const updated = await prisma.householdExpense.update({
@@ -265,6 +268,8 @@ router.put('/:id', upload, async (req, res) => {
         customFields: customFields !== undefined ? parseJson(customFields) : undefined,
         splitMode: splitMode !== undefined ? (splitMode || 'single') : undefined,
         splitShares: splitShares !== undefined ? parseJson(splitShares) : undefined,
+        paymentMethod: paymentMethod !== undefined ? (paymentMethod || null) : undefined,
+        fromIncomeId: fromIncomeId !== undefined ? (fromIncomeId || null) : undefined,
         updatedById: req.user.id,
       },
     });

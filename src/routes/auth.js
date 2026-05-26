@@ -32,9 +32,14 @@ const avatarUpload = multer({
 }).single('avatar');
 
 
+// Refresh tokens last a full year. They rotate on every /refresh call, so an
+// active user effectively stays logged in forever; a phone left untouched for
+// more than a year is the only way to get kicked out.
+const REFRESH_TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
+
 function generateTokens(userId) {
   const accessToken = jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '15m' });
-  const refreshToken = jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET, { expiresIn: '30d' });
+  const refreshToken = jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET, { expiresIn: '365d' });
   return { accessToken, refreshToken };
 }
 
@@ -72,7 +77,7 @@ router.post('/register', async (req, res) => {
       data: {
         token: refreshToken,
         userId: user.id,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
       },
     });
 
@@ -102,7 +107,7 @@ router.post('/login', async (req, res) => {
       data: {
         token: refreshToken,
         userId: user.id,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
       },
     });
 
@@ -133,7 +138,7 @@ router.post('/refresh', async (req, res) => {
       data: {
         token: newRefresh,
         userId: payload.userId,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
       },
     });
 

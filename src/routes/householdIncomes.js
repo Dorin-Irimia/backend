@@ -40,7 +40,7 @@ router.post('/', async (req, res) => {
   try {
     const {
       clientId, householdId, title, amount, currency, category, date,
-      source, recurring, notes, customFields,
+      source, recurring, notes, customFields, paymentMethod,
     } = req.body;
     if (!householdId || !title || !amount || !date) {
       return res.status(400).json({ error: 'Câmpuri obligatorii: locuință, titlu, sumă, dată' });
@@ -69,6 +69,7 @@ router.post('/', async (req, res) => {
         recurring: recurring || 'none',
         notes: notes || null,
         customFields: parseJson(customFields),
+        paymentMethod: paymentMethod || null,
       },
     });
     await audit(req.user.id, 'CREATE', 'HouseholdIncome', inc.id, title, req.ip);
@@ -90,6 +91,7 @@ router.put('/:id', async (req, res) => {
     }
     const {
       title, amount, currency, category, date, source, recurring, notes, customFields,
+      paymentMethod,
     } = req.body;
     const updated = await prisma.householdIncome.update({
       where: { id: req.params.id },
@@ -103,6 +105,7 @@ router.put('/:id', async (req, res) => {
         recurring: recurring || undefined,
         notes: notes !== undefined ? (notes || null) : undefined,
         customFields: customFields !== undefined ? parseJson(customFields) : undefined,
+        paymentMethod: paymentMethod !== undefined ? (paymentMethod || null) : undefined,
         updatedById: req.user.id,
       },
       include: auditInclude,

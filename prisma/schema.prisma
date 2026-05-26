@@ -36,22 +36,22 @@ model User {
   vehicleMemberships     VehicleMember[] @relation("MemberUser")
   vehicleMembersAdded    VehicleMember[] @relation("MemberAddedBy")
 
-  households                Household[]
-  householdMemberships      HouseholdMember[]   @relation("HouseholdMemberUser")
-  householdMembersAdded     HouseholdMember[]   @relation("HouseholdMemberAddedBy")
-  householdExpenses         HouseholdExpense[]
-  householdExpensesUpdated  HouseholdExpense[]  @relation("HouseholdExpenseUpdatedBy")
-  householdIncomes          HouseholdIncome[]
-  householdIncomesUpdated   HouseholdIncome[]   @relation("HouseholdIncomeUpdatedBy")
-  householdEvents           HouseholdEvent[]
-  householdEventsUpdated    HouseholdEvent[]    @relation("HouseholdEventUpdatedBy")
-  householdBills            HouseholdBill[]
-  householdBillsUpdated     HouseholdBill[]     @relation("HouseholdBillUpdatedBy")
-  budgetCategories          BudgetCategory[]
-  budgetCategoriesUpdated   BudgetCategory[]    @relation("BudgetCategoryUpdatedBy")
+  households               Household[]
+  householdMemberships     HouseholdMember[]  @relation("HouseholdMemberUser")
+  householdMembersAdded    HouseholdMember[]  @relation("HouseholdMemberAddedBy")
+  householdExpenses        HouseholdExpense[]
+  householdExpensesUpdated HouseholdExpense[] @relation("HouseholdExpenseUpdatedBy")
+  householdIncomes         HouseholdIncome[]
+  householdIncomesUpdated  HouseholdIncome[]  @relation("HouseholdIncomeUpdatedBy")
+  householdEvents          HouseholdEvent[]
+  householdEventsUpdated   HouseholdEvent[]   @relation("HouseholdEventUpdatedBy")
+  householdBills           HouseholdBill[]
+  householdBillsUpdated    HouseholdBill[]    @relation("HouseholdBillUpdatedBy")
+  budgetCategories         BudgetCategory[]
+  budgetCategoriesUpdated  BudgetCategory[]   @relation("BudgetCategoryUpdatedBy")
 
-  serviceRecords          ServiceRecord[]
-  serviceRecordsUpdated   ServiceRecord[] @relation("ServiceRecordUpdatedBy")
+  serviceRecords        ServiceRecord[]
+  serviceRecordsUpdated ServiceRecord[] @relation("ServiceRecordUpdatedBy")
 
   chatMessagesSent     ChatMessage[] @relation("ChatFrom")
   chatMessagesReceived ChatMessage[] @relation("ChatTo")
@@ -197,14 +197,14 @@ model Folder {
 }
 
 model Invoice {
-  id        String  @id @default(uuid())
-  clientId  String?
-  userId    String
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String  @id @default(uuid())
+  clientId    String?
+  userId      String
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   updatedById String?
-  updatedBy User?   @relation("InvoiceUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
-  vehicleId String
-  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  updatedBy   User?   @relation("InvoiceUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  vehicleId   String
+  vehicle     Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
 
   title        String
   amount       Float
@@ -253,14 +253,14 @@ model Reminder {
 }
 
 model FuelLog {
-  id        String  @id @default(uuid())
-  clientId  String?
-  userId    String
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String  @id @default(uuid())
+  clientId    String?
+  userId      String
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   updatedById String?
-  updatedBy User?   @relation("FuelLogUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
-  vehicleId String
-  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  updatedBy   User?   @relation("FuelLogUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  vehicleId   String
+  vehicle     Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
 
   date         String // YYYY-MM-DD
   time         String? // HH:mm
@@ -405,8 +405,18 @@ model HouseholdExpense {
   customFields Json?
 
   // Sursa (când e creată automat dintr-o factură/alimentare mașină)
-  source       String? // null | invoice | fuel | bill
-  sourceId     String? // id-ul invoice/fuel/bill care a generat-o
+  source   String? // null | invoice | fuel | bill
+  sourceId String? // id-ul invoice/fuel/bill care a generat-o
+
+  // Metoda de plată: cash | card. Default cash pentru că la mâna majorității e ce
+  // pierzi din vedere când nu există extras. null = nesetat (date vechi).
+  paymentMethod String? // cash | card
+
+  // Venitul concret din care a fost achitată cheltuiala (opțional). Permite UI
+  // să afișeze cât mai are de cheltuit din fiecare venit. SetNull la șterge
+  // venitul ca să nu se piardă cheltuiala.
+  fromIncomeId String?
+  fromIncome   HouseholdIncome? @relation("ExpenseFromIncome", fields: [fromIncomeId], references: [id], onDelete: SetNull)
 
   // Splitting
   splitMode   String? @default("single") // single | equal | custom
@@ -420,6 +430,7 @@ model HouseholdExpense {
   @@unique([userId, clientId])
   @@index([householdId])
   @@index([householdId, source])
+  @@index([fromIncomeId])
 }
 
 model HouseholdIncome {
@@ -441,6 +452,13 @@ model HouseholdIncome {
   recurring    String  @default("none") // none | monthly | yearly
   notes        String?
   customFields Json?
+
+  // Metoda de încasare: cash | card. null = nesetat (date vechi).
+  paymentMethod String? // cash | card
+
+  // Cheltuielile achitate explicit din acest venit. Permite calcul rapid de
+  // "cât mai am din venitul X" și un breakdown clar pe income.
+  expensesFromIncome HouseholdExpense[] @relation("ExpenseFromIncome")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
@@ -478,14 +496,14 @@ model HouseholdEvent {
 }
 
 model ServiceRecord {
-  id        String  @id @default(uuid())
-  clientId  String?
-  userId    String
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String  @id @default(uuid())
+  clientId    String?
+  userId      String
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   updatedById String?
-  updatedBy User?   @relation("ServiceRecordUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
-  vehicleId String
-  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  updatedBy   User?   @relation("ServiceRecordUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  vehicleId   String
+  vehicle     Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
 
   date     String // YYYY-MM-DD (planificat sau efectuat)
   km       Int?
