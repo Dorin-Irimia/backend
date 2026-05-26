@@ -49,6 +49,9 @@ model User {
   householdBillsUpdated    HouseholdBill[]    @relation("HouseholdBillUpdatedBy")
   budgetCategories         BudgetCategory[]
   budgetCategoriesUpdated  BudgetCategory[]   @relation("BudgetCategoryUpdatedBy")
+  customCategories         CustomCategory[]
+  dashboardLayouts         DashboardLayout[]
+  filterPresets            FilterPreset[]
 
   serviceRecords        ServiceRecord[]
   serviceRecordsUpdated ServiceRecord[] @relation("ServiceRecordUpdatedBy")
@@ -572,6 +575,67 @@ model BudgetCategory {
 
   @@unique([householdId, key])
   @@index([householdId])
+}
+
+// Layout pentru dashboard-ul web — un user poate avea mai multe dashboard-uri
+// (ex. "Personal", "Locuință"). `layout` este JSON cu pozițiile și
+// configurația fiecărui widget pe grilă: [{ i, x, y, w, h, widgetType, props }]
+model DashboardLayout {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name      String  @default("Implicit")
+  isDefault Boolean @default(false)
+  layout    Json    @default("[]") // RGL layout + widget metadata
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// Set de filtre salvat pentru pagina de Rapoarte — coloane vizibile, criterii,
+// sortare, perioadă. Permite utilizatorului să-și salveze rapoarte frecvente.
+model FilterPreset {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  entity      String // "expenses" | "incomes" | "vehicles" | etc.
+  config      Json   // { filters: [...], columns: [...], sort: {...}, period: {...} }
+  sortOrder   Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, entity])
+}
+
+// Categorii personalizate ale utilizatorului (private, nu sunt partajate cu
+// alți membri ai locuinței). Acoperă atât expense, cât și income. Înlocuiește
+// stocarea locală (AsyncStorage) ca să fie disponibile cross-device.
+model CustomCategory {
+  id        String @id @default(uuid())
+  clientId  String?
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  key   String // identificator stabil, ex. "custom-1234-abc"
+  label String
+  icon  String @default("📌")
+  color String @default("#6B7280")
+  type  String @default("expense") // expense | income
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([userId, key])
+  @@unique([userId, clientId])
+  @@index([userId])
 }
 
 model ChatMessage {

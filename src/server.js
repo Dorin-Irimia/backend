@@ -22,6 +22,9 @@ const householdIncomeRoutes = require('./routes/householdIncomes');
 const householdEventRoutes = require('./routes/householdEvents');
 const householdBillRoutes = require('./routes/householdBills');
 const budgetRoutes = require('./routes/budgets');
+const customCategoryRoutes = require('./routes/customCategories');
+const dashboardLayoutRoutes = require('./routes/dashboardLayouts');
+const filterPresetRoutes = require('./routes/filterPresets');
 const serviceRecordRoutes = require('./routes/serviceRecords');
 const chatRoutes = require('./routes/chats');
 
@@ -63,10 +66,39 @@ app.use('/api/household-incomes', householdIncomeRoutes);
 app.use('/api/household-events', householdEventRoutes);
 app.use('/api/household-bills', householdBillRoutes);
 app.use('/api/budgets', budgetRoutes);
+app.use('/api/custom-categories', customCategoryRoutes);
+app.use('/api/dashboard-layouts', dashboardLayoutRoutes);
+app.use('/api/filter-presets', filterPresetRoutes);
 app.use('/api/service-records', serviceRecordRoutes);
 app.use('/api/chats', chatRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
+
+// ── Web SPA ───────────────────────────────────────────────────────────────
+// Build-ul Vite generează /web/dist/. Îl servim la /app/* iar restul de
+// rute care nu sunt /api le redirecționăm tot la index.html, ca să meargă
+// react-router fără hash-uri. Dacă build-ul nu există încă, returnăm un
+// mesaj prietenos cu instrucțiunile de build — fără să stricăm /api.
+const webDist = path.join(__dirname, '../../web/dist');
+const fs = require('fs');
+if (fs.existsSync(webDist)) {
+  app.use('/app', express.static(webDist));
+  // SPA fallback — orice cale sub /app (alta decât fișierele statice deja
+  // servite) primește index.html. Așa /app/vehicles, /app/expenses etc.
+  // încarcă SPA-ul și react-router preia URL-ul de acolo.
+  app.get(/^\/app(\/.*)?$/, (req, res) => {
+    res.sendFile(path.join(webDist, 'index.html'));
+  });
+  // Confort: redirecționăm rădăcina spre /app/.
+  app.get('/', (req, res) => res.redirect('/app/'));
+} else {
+  app.get(['/', '/app', '/app/*'], (req, res) => {
+    res.status(503).send(
+      '<h2>Web build lipsește</h2>' +
+      '<p>Rulează <code>cd web && npm install && npm run build</code> apoi repornește serverul.</p>'
+    );
+  });
+}
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
